@@ -1,0 +1,68 @@
+<div class="mapa-container">
+  <!-- Header -->
+  <header class="header">
+    <button class="back-button" (click)="goBack()">
+      <span class="back-icon">‹</span>
+    </button>
+    <h1 class="header-title">Mapa</h1>
+  </header>
+
+  <!-- Content -->
+  <div class="content">
+    <!-- Title Section -->
+    <div class="title-section">
+      <h2 class="section-title">Visualización ubicación de siniestros</h2>
+    </div>
+
+    <!-- Map Container -->
+    <div class="map-wrapper">
+      <div class="map-container-inner" [style.transform]="'scale(' + zoomLevel + ')'">
+        <!-- Map Image (placeholder - reemplazar con tu mapa real) -->
+        <img 
+          src="https://previews.123rf.com/images/kume111000/kume1110001802/kume111000180200045/95094687-gps-navigation-background-city-map-vector-illustration.jpg" 
+          alt="Mapa"
+          class="map-image"
+          onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"
+        />
+        
+        <!-- Fallback: Mapa estilizado con CSS -->
+        <div class="map-placeholder">
+          <div class="map-street street-1"></div>
+          <div class="map-street street-2"></div>
+          <div class="map-street street-3"></div>
+          <div class="map-street street-4"></div>
+          <div class="map-area green-area"></div>
+        </div>
+
+        <!-- Markers -->
+        <div 
+          *ngFor="let marker of markers"
+          class="marker"
+          [style.top.%]="marker.lat"
+          [style.left.%]="marker.lng"
+          (click)="onMarkerClick(marker)"
+          [title]="marker.title">
+          <div class="marker-pin"></div>
+        </div>
+      </div>
+
+      <!-- Zoom Controls -->
+      <div class="zoom-controls">
+        <button class="zoom-button zoom-in" (click)="zoomIn()">
+          <span class="zoom-icon">🔍</span>
+          <span class="plus-sign">+</span>
+        </button>
+        <button class="zoom-button zoom-out" (click)="zoomOut()">
+          <span class="zoom-icon">🔍</span>
+          <span class="minus-sign">−</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Report Button -->
+    <button class="report-button" (click)="reportFlood()">
+      <span class="report-icon">🚨</span>
+      <span class="report-text">Reportar inundación y marcar ubicación</span>
+    </button>
+  </div>
+</div>
