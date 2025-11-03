@@ -7,24 +7,13 @@
     <h1 class="app-title">Weatheria</h1>
   </header>
 
-  <!-- Menú desplegable para cambiar estados (solo para desarrollo) -->
+  <!-- Menú desplegable -->
   <div class="dev-menu" *ngIf="showMenu">
-    <p class="dev-menu-title">Cambiar estado del clima:</p>
-    <button 
-      *ngFor="let state of weatherStates" 
-      (click)="changeWeatherState(state.value)"
-      class="dev-menu-item"
-      [class.active]="currentWeatherState === state.value">
-      {{ state.label }}
-    </button>
-    <button (click)="goToDashboard()" class="dev-menu-item">
-     Ver Dashboard
-    </button>
-    <button (click)="goToHistorial()" class="dev-menu-item">
-     Ver Historial
+    <button (click)="goToLogin()" class="dev-menu-item">
+      Iniciar sesión
     </button>
     <button (click)="goToMapa()" class="dev-menu-item">
-     Ver Mapa
+      Ver Mapa
     </button>
   </div>
 

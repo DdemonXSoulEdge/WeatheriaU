@@ -1,5 +1,6 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { HttpClient, HttpClientModule } from '@angular/common/http';  // Agrega HttpClient para llamadas al backend
 import { Router } from '@angular/router';
 
 interface HourlyWeather {
@@ -8,7 +9,7 @@ interface HourlyWeather {
   temp: string;
 }
 
-type WeatherState = 'cloudy' | 'sunny' | 'night' | 'rainy';
+type WeatherState = 'night' | 'cloudy' | 'rainy' | 'sunny';
 
 interface WeatherStateOption {
   value: WeatherState;
@@ -18,40 +19,32 @@ interface WeatherStateOption {
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, HttpClientModule],  // Agrega HttpClientModule para standalone
   templateUrl: './home.html',
   styleUrls: ['./home.scss']
 })
-export class HomeComponent {
-  // Control para cambiar el estado climático en desarrollo
-  currentWeatherState: WeatherState = 'cloudy';
+export class HomeComponent implements OnInit {
   showMenu = false;
   
-  weatherStates: WeatherStateOption[] = [
-    { value: 'cloudy', label: 'Nublado' },
-    { value: 'sunny', label: 'Soleado' },
-    { value: 'night', label: 'Noche' },
-    { value: 'rainy', label: 'Lluvioso' }
-  ];
-
-  currentDate = 'Martes 30 de Septiembre de 2025';
+  // Fecha dinámica (se actualiza en ngOnInit)
+  currentDate = '';
   currentTemp = '17 °C';
   location = 'Estación - Universidad Tecnológica de Querétaro';
 
   // Descripciones según el clima
   weatherDescriptions: Record<WeatherState, string> = {
-    cloudy: 'Nublado, lleva paraguas por precaución',
-    sunny: 'Soleado, sin riesgos de lluvia',
-    night: 'Noche despejada, sin riesgo de lluvia',
-    rainy: 'Lloviendo, toma precauciones al salir'
+    night: 'Periodo de oscuridad, desde el atardecer hasta el amanecer.',
+    cloudy: 'Primeras horas del día, cielo parcialmente cubierto o neblina matutina.',
+    rainy: 'En muchas regiones, las lluvias se concentran cerca del mediodía.',
+    sunny: 'Horas más despejadas y cálidas antes del atardecer.'
   };
 
   // Iconos según el clima
   mainWeatherIcons: Record<WeatherState, string> = {
-    cloudy: '☁️',
-    sunny: '☀️',
     night: '🌙',
-    rainy: '🌧️'
+    cloudy: '🌥️',
+    rainy: '🌧️',
+    sunny: '☀️'
   };
 
   hourlyForecast: HourlyWeather[] = [
@@ -62,32 +55,88 @@ export class HomeComponent {
     { time: '10:00 pm', icon: '🌙', temp: '15°C' }
   ];
 
-  constructor(private router: Router) {}
+  // URL del backend (ajusta si es necesario, ej: para producción cambia a tu dominio)
+  private backendUrl = 'http://localhost:5001';  // Puerto de tu Flask app
+
+  constructor(private router: Router, private http: HttpClient) {}  // Inyecta HttpClient
+
+  ngOnInit() {
+    this.currentWeatherState = this.getCurrentWeatherState();
+    this.updateCurrentDate();  // Actualiza la fecha dinámicamente
+    // Ya no necesitas EmailJS, se maneja en el backend
+  }
+
+  // Método para actualizar la fecha actual (en español)
+  private updateCurrentDate(): void {
+    const now = new Date();
+    const options: Intl.DateTimeFormatOptions = {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    };
+    this.currentDate = now.toLocaleDateString('es-ES', options);  // Ej: "lunes, 3 de noviembre de 2025"
+  }
+
+  private getCurrentWeatherState(): WeatherState {
+    const now = new Date();
+    const hour = now.getHours();
+    
+    if (hour >= 18 || hour < 6) {
+      return 'night';
+    } else if (hour >= 6 && hour < 10) {
+      return 'cloudy';
+    } else if (hour >= 10 && hour < 14) {
+      return 'rainy';
+    } else {
+      return 'sunny';
+    }
+  }
 
   toggleMenu() {
     this.showMenu = !this.showMenu;
   }
-  goToDashboard() {
-  this.router.navigate(['/dashboard']);
-  this.showMenu = false;
-}
-
-goToHistorial() {
-  this.router.navigate(['/historial']);
-  this.showMenu = false;
-}
-goToMapa() {
-  this.router.navigate(['/mapa']);
-  this.showMenu = false;
-}
-  changeWeatherState(state: WeatherState) {
-    this.currentWeatherState = state;
+  
+  goToMapa() {
+    this.router.navigate(['/mapa']);
+    this.showMenu = false;
+  }
+  
+  goToLogin() {
+    this.router.navigate(['/login']);
     this.showMenu = false;
   }
 
-  reportFlood() {
-    alert('Funcionalidad: Reportar inundación y marcar ubicación');
-    // Aquí irá la navegación a la pantalla de reporte
+  reportFlood() {  // Ya no async, usa subscribe para manejar la respuesta
+    // Obtén la ubicación actual del usuario (geolocalización) - opcional, si falla usa la hardcodeada
+    let userLocation = this.location;
+    
+    // Prepara los parámetros para el backend
+    const payload = {
+      ubicacion: userLocation,
+      fecha: this.currentDate,
+      temperatura: this.currentTemp,
+      descripcion_clima: this.currentDescription,
+      mensaje: 'Se ha reportado una posible inundación en la zona. Verificar inmediatamente.'  // Personalízalo
+    };
+
+    // Debug: Log del payload
+    console.log('Payload enviado:', payload);
+
+    // Envía POST al endpoint del backend
+    this.http.post(`${this.backendUrl}/report_flood`, payload).subscribe({
+      next: (response: any) => {
+        console.log('Respuesta del backend:', response);
+        alert('¡Reporte enviado exitosamente! Tu compañía ha sido notificada por email.');
+        // Opcional: Navega a una página de confirmación
+        // this.router.navigate(['/reporte-exito']);
+      },
+      error: (error: any) => {
+        console.error('Error al enviar el reporte:', error);
+        const errorMsg = error.error?.intData?.message || 'Error desconocido';
+        alert(`Error al enviar el reporte: ${errorMsg}. Verifica que el backend esté corriendo.`);
+      }
+    });
   }
 
   get currentDescription(): string {
@@ -97,4 +146,6 @@ goToMapa() {
   get mainIcon(): string {
     return this.mainWeatherIcons[this.currentWeatherState];
   }
+
+  currentWeatherState: WeatherState = 'night'; 
 }
