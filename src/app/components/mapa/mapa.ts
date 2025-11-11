@@ -1,48 +1,48 @@
-import { Component, OnInit } from '@angular/core';  // Agrega OnInit para ngOnInit
+import { Component, OnInit, ViewChild, AfterViewInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { HttpClient, HttpClientModule } from '@angular/common/http';  // Para llamadas al backend
+import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
+import { GoogleMapsModule, GoogleMap } from '@angular/google-maps';
 
 interface Marker {
   id: number;
   lat: number;
   lng: number;
   title: string;
+  icon: google.maps.Icon;
 }
 
-type WeatherState = 'night' | 'cloudy' | 'rainy' | 'sunny';  // Agrega tipo para clima simulado
+type WeatherState = 'night' | 'cloudy' | 'rainy' | 'sunny';
 
 @Component({
   selector: 'app-mapa',
   standalone: true,
-  imports: [CommonModule, HttpClientModule],  // Agrega HttpClientModule
+  imports: [CommonModule, GoogleMapsModule],
+  providers: [GoogleMap],
   templateUrl: './mapa.html',
   styleUrls: ['./mapa.scss']
 })
-export class MapaComponent implements OnInit {  // Implementa OnInit
-  zoomLevel = 1;
-  maxZoom = 3;
-  minZoom = 0.5;
+export class MapaComponent implements OnInit, AfterViewInit {
+  @ViewChild(GoogleMap, { static: false }) map!: GoogleMap;
 
-  // Marcadores de siniestros (ejemplo de coordenadas)
-  markers: Marker[] = [
-    { id: 1, lat: 35, lng: 15, title: 'Siniestro 1' },
-    { id: 2, lat: 45, lng: 55, title: 'Siniestro 2' },
-    { id: 3, lat: 25, lng: 25, title: 'Siniestro 3' },
-    { id: 4, lat: 65, lng: 60, title: 'Siniestro 4' },
-    { id: 5, lat: 75, lng: 35, title: 'Siniestro 5' },
-    { id: 6, lat: 85, lng: 35, title: 'Siniestro 6' }
-  ];
+  center: google.maps.LatLngLiteral = { lat: 20.5888, lng: -100.3961 };
+  zoomLevel = 10;
 
-  // Fecha dinámica (se actualiza en ngOnInit)
+  isReporting = false;
+
+  private defaultIcon: google.maps.Icon = {
+    url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png'
+  };
+
+  // ✅ Ya NO hay marcadores por defecto
+  markers: Marker[] = [];
+
   currentDate = '';
-  currentTemp = '17 °C';  // Fijo para demo
-  location = 'Estación - Universidad Tecnológica de Querétaro';  // Fallback
+  currentTemp = '17 °C';
+  location = 'Estación - Universidad Tecnológica de Querétaro';
 
-  // Clima simulado (fijo para demo; puedes randomizar o linkear con Home)
-  private currentWeatherState: WeatherState = 'rainy';  // Ej: lluvioso para mapa de siniestros
+  private currentWeatherState: WeatherState = 'rainy';
 
-  // Descripciones según el clima (copiado de Home para consistencia)
   private weatherDescriptions: Record<WeatherState, string> = {
     night: 'Periodo de oscuridad, desde el atardecer hasta el amanecer.',
     cloudy: 'Primeras horas del día, cielo parcialmente cubierto o neblina matutina.',
@@ -50,107 +50,112 @@ export class MapaComponent implements OnInit {  // Implementa OnInit
     sunny: 'Horas más despejadas y cálidas antes del atardecer.'
   };
 
-  // URL del backend (igual que en Home)
-  private backendUrl = 'http://localhost:5001';  // Cambia si usas otro puerto
+  private backendUrl = 'http://localhost:5001';
 
-  constructor(private router: Router, private http: HttpClient) {}  // Inyecta HttpClient
+  private http = inject(HttpClient);
+
+  constructor(private router: Router) {}
 
   ngOnInit() {
-    this.updateCurrentDate();  // Actualiza fecha al cargar el componente
+    this.updateCurrentDate();
   }
 
-  // Método para actualizar la fecha actual (en español, igual que Home)
-  private updateCurrentDate(): void {
-    const now = new Date();
-    const options: Intl.DateTimeFormatOptions = {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
+  ngAfterViewInit() {
+    this.initializeMap();
+  }
+
+  private initializeMap() {
+    if (this.map && this.map.googleMap) {
+      this.map.googleMap.setCenter(this.center);
+      this.map.googleMap.setZoom(this.zoomLevel);
+    }
+  }
+
+  onMapClick(event: google.maps.MapMouseEvent) {
+    if (event.latLng) {
+      this.addMarker(event.latLng.lat(), event.latLng.lng(), 'Siniestro reportado');
+    }
+  }
+
+  addMarker(lat: number, lng: number, title: string, customIcon?: google.maps.Icon) {
+    const newMarker: Marker = {
+      id: Date.now(),
+      lat,
+      lng,
+      title,
+      icon: customIcon || this.defaultIcon
     };
-    this.currentDate = now.toLocaleDateString('es-ES', options);  // Ej: "lunes, 3 de noviembre de 2025"
+
+    this.markers.push(newMarker);
+    console.log('Nuevo marcador:', newMarker);
+
+    setTimeout(() => {
+      this.map.googleMap?.setCenter({ lat, lng });
+      this.map.googleMap?.setZoom(15);
+    }, 50);
+  }
+
+  reportFlood() {
+    if (this.isReporting) return;
+    this.isReporting = true;
+
+    const floodIcon: google.maps.Icon = {
+      url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        this.addMarker(lat, lng, 'Inundación Reportada', floodIcon);
+        this.sendReport(`GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+      },
+      () => {
+        this.addMarker(this.center.lat, this.center.lng, 'Inundación Reportada', floodIcon);
+        this.sendReport(this.location);
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  }
+
+  private sendReport(userLocation: string) {
+    const payload = {
+      ubicacion: userLocation,
+      fecha: this.currentDate,
+      temperatura: this.currentTemp,
+      descripcion_clima: this.weatherDescriptions[this.currentWeatherState],
+      mensaje: 'Se ha reportado una posible inundación desde el mapa.'
+    };
+
+    console.log('Enviando reporte:', payload);
+
+    this.http.post(`${this.backendUrl}/report_flood`, payload).subscribe({
+      next: () => {
+        alert('✅ Reporte enviado. La compañía ha sido notificada por correo.');
+      },
+      error: () => {
+        alert('❌ No se pudo enviar el correo. Verifica el servidor.');
+      },
+      complete: () => (this.isReporting = false)
+    });
+  }
+
+  zoomIn() {
+    this.zoomLevel++;
+    this.map.googleMap?.setZoom(this.zoomLevel);
+  }
+
+  zoomOut() {
+    this.zoomLevel--;
+    this.map.googleMap?.setZoom(this.zoomLevel);
   }
 
   goBack() {
     this.router.navigate(['/home']);
   }
 
-  zoomIn() {
-    if (this.zoomLevel < this.maxZoom) {
-      this.zoomLevel += 0.2;
-    }
-  }
-
-  zoomOut() {
-    if (this.zoomLevel > this.minZoom) {
-      this.zoomLevel -= 0.2;
-    }
-  }
-
-  reportFlood() {
-    console.log('Iniciando reporte desde mapa... URL backend:', this.backendUrl);  // Log para debug
-
-    // Obtén la ubicación actual (geolocalización síncrona con callback)
-    let userLocation = this.location;
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          userLocation = `${this.location} - GPS: ${position.coords.latitude.toFixed(4)}, ${position.coords.longitude.toFixed(4)}`;
-          console.log('GPS obtenido en mapa:', userLocation);  // Log para debug
-          this.sendReport(userLocation);  // Envía después de obtener GPS
-        },
-        (geoError) => {
-          console.warn('Geolocalización falló en mapa, usando ubicación por defecto:', geoError);
-          this.sendReport(userLocation);  // Envía con fallback
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 5001,
-          maximumAge: 0
-        }
-      );
-    } else {
-      console.warn('Geolocalización no soportada en mapa');
-      this.sendReport(userLocation);
-    }
-  }
-
-  // Método privado para enviar el reporte (igual que en Home)
-  private sendReport(userLocation: string) {
-    // Prepara los parámetros para el backend (mismo formato que Home)
-    const payload = {
-      ubicacion: userLocation,
-      fecha: this.currentDate,
-      temperatura: this.currentTemp,
-      descripcion_clima: this.weatherDescriptions[this.currentWeatherState],
-      mensaje: 'Se ha reportado una posible inundación en el mapa de siniestros. Verificar inmediatamente.'
-    };
-
-    console.log('Payload enviado desde mapa:', payload);  // Log para debug
-
-    // Envía POST al endpoint del backend
-    this.http.post(`${this.backendUrl}/report_flood`, payload).subscribe({
-      next: (response: any) => {
-        console.log('Respuesta exitosa del backend en mapa:', response);
-        alert('¡Reporte enviado exitosamente desde el mapa! Tu compañía ha sido notificada por email.');
-        // Opcional: Agrega un marcador nuevo o navega
-      },
-      error: (error: any) => {
-        console.error('Error detallado en mapa:', error);  // Log completo
-        const errorMsg = error.error?.intData?.message || error.message || 'Error de conexión (verifica backend)';
-        alert(`Error al enviar el reporte desde el mapa: ${errorMsg}`);
-      }
-    });
-  }
-
-  onMarkerClick(marker: Marker) {
-    console.log('Marcador clickeado:', marker);
-    alert(`Siniestro en: ${marker.title}`);
-    // Opcional: Aquí podrías reportar basado en este marcador (e.g., userLocation = `${marker.lat}, ${marker.lng}`)
-  }
-
-  // Getter para descripción (igual que Home)
-  get currentDescription(): string {
-    return this.weatherDescriptions[this.currentWeatherState];
+  private updateCurrentDate() {
+    const now = new Date(2025, 10, 8);
+    this.currentDate = now.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   }
 }
