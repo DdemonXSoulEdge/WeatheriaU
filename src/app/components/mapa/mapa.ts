@@ -58,6 +58,7 @@ export class MapaComponent implements OnInit, AfterViewInit {
 
   ngOnInit() {
     this.updateCurrentDate();
+    this.loadMarkers();
   }
 
   ngAfterViewInit() {
@@ -95,6 +96,51 @@ export class MapaComponent implements OnInit, AfterViewInit {
     }, 50);
   }
 
+  loadMarkers() {
+    this.http.get(`${this.backendUrl}/flood_history`).subscribe({
+      next: (response: any) => {
+        const reports = response.intData.data || [];
+        const now = new Date();
+        const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const validReports = reports.filter((report: any) => {
+          const created = new Date(report.created_at);
+          return created > cutoff;
+        });
+
+        // Mantener marcadores manuales (rojos)
+        const manualMarkers = this.markers.filter(m => m.icon.url.includes('red-dot'));
+
+        // Filtrar reportes con coordenadas válidas antes de mapear
+        const validReportsWithCoords = validReports.filter((report: any) => report.lat != null && report.lng != null);
+
+        // Agregar marcadores de inundación (azules)
+        const floodMarkers: Marker[] = validReportsWithCoords
+          .map((report: any) => ({
+            id: report.id,
+            lat: report.lat as number,
+            lng: report.lng as number,
+            title: 'Inundación Reportada',
+            icon: { url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png' }
+          }));
+
+        this.markers = [...manualMarkers, ...floodMarkers];
+
+        // Configurar timeouts para auto-eliminación de marcadores de inundación después de 24 horas
+        validReports.forEach((report: any) => {
+          const created = new Date(report.created_at);
+          const expireDate = new Date(created.getTime() + 24 * 60 * 60 * 1000);
+          const delay = expireDate.getTime() - Date.now();
+          if (delay > 0) {
+            setTimeout(() => {
+              this.markers = this.markers.filter(m => m.id !== report.id);
+            }, delay);
+          }
+        });
+      },
+      error: (err) => console.error('Error loading markers:', err)
+    });
+  }
+
   reportFlood() {
     if (this.isReporting) return;
     this.isReporting = true;
@@ -107,18 +153,69 @@ export class MapaComponent implements OnInit, AfterViewInit {
       (pos) => {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
-        this.addMarker(lat, lng, 'Inundación Reportada', floodIcon);
-        this.sendReport(`GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+        const tempId = -Date.now();
+        this.markers.push({
+          id: tempId,
+          lat,
+          lng,
+          title: 'Inundación Reportada',
+          icon: floodIcon
+        });
+        setTimeout(() => {
+          this.map.googleMap?.setCenter({ lat, lng });
+          this.map.googleMap?.setZoom(15);
+        }, 50);
+        this.sendReport(`GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}`, tempId);
       },
       () => {
-        this.addMarker(this.center.lat, this.center.lng, 'Inundación Reportada', floodIcon);
-        this.sendReport(this.location);
+        // Intentar geocodificar la ubicación por defecto
+        this.http.post(`${this.backendUrl}/geocode`, { address: this.location }).subscribe({
+          next: (resp: any) => {
+            if (resp.status === 'success') {
+              const { lat, lng } = resp.coordinates;
+              const tempId = -Date.now();
+              this.markers.push({
+                id: tempId,
+                lat,
+                lng,
+                title: 'Inundación Reportada',
+                icon: floodIcon
+              });
+              setTimeout(() => {
+                this.map.googleMap?.setCenter({ lat, lng });
+                this.map.googleMap?.setZoom(15);
+              }, 50);
+              this.sendReport(`GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}`, tempId);
+            } else {
+              this.addFallbackMarker(floodIcon);
+            }
+          },
+          error: () => {
+            this.addFallbackMarker(floodIcon);
+          }
+        });
       },
       { enableHighAccuracy: true, timeout: 8000 }
     );
   }
 
-  private sendReport(userLocation: string) {
+  private addFallbackMarker(floodIcon: google.maps.Icon) {
+    const tempId = -Date.now();
+    this.markers.push({
+      id: tempId,
+      lat: this.center.lat,
+      lng: this.center.lng,
+      title: 'Inundación Reportada',
+      icon: floodIcon
+    });
+    setTimeout(() => {
+      this.map.googleMap?.setCenter(this.center);
+      this.map.googleMap?.setZoom(15);
+    }, 50);
+    this.sendReport(this.location, tempId);
+  }
+
+  private sendReport(userLocation: string, tempId?: number) {
     const payload = {
       ubicacion: userLocation,
       fecha: this.currentDate,
@@ -132,9 +229,27 @@ export class MapaComponent implements OnInit, AfterViewInit {
     this.http.post(`${this.backendUrl}/report_flood`, payload).subscribe({
       next: () => {
         alert('✅ Reporte enviado. La compañía ha sido notificada por correo.');
+        if (tempId && tempId < 0) {
+          if (userLocation.startsWith('GPS:')) {
+            // Ubicación precisa: remover temp y recargar desde BD
+            this.markers = this.markers.filter(m => m.id !== tempId);
+            this.loadMarkers();
+          } else {
+            // Ubicación aproximada: mantener temp pero expirar en 24h
+            setTimeout(() => {
+              this.markers = this.markers.filter(m => m.id !== tempId);
+            }, 24 * 60 * 60 * 1000);
+          }
+        }
       },
       error: () => {
         alert('❌ No se pudo enviar el correo. Verifica el servidor.');
+        if (tempId && tempId < 0) {
+          // No enviado: expirar en 1 hora
+          setTimeout(() => {
+            this.markers = this.markers.filter(m => m.id !== tempId);
+          }, 60 * 60 * 1000);
+        }
       },
       complete: () => (this.isReporting = false)
     });
@@ -155,7 +270,12 @@ export class MapaComponent implements OnInit, AfterViewInit {
   }
 
   private updateCurrentDate() {
-    const now = new Date(2025, 10, 8);
-    this.currentDate = now.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const now = new Date();  // ✅ Cambiado: usa la fecha/hora actual en lugar de hardcode
+    this.currentDate = now.toLocaleDateString('es-ES', { 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
   }
 }

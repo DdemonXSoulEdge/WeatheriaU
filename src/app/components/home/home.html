@@ -50,7 +50,7 @@
   </div>
 
   <!-- Botón de reporte de inundación -->
-  <button class="report-button" (click)="reportFlood()">
+  <button class="report-button" (click)="reportFlood()" [disabled]="isReporting">
     <span class="report-icon">🚨</span>
     <span class="report-text">Reportar inundación y marcar ubicación</span>
   </button>

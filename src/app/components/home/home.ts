@@ -31,6 +31,8 @@ export class HomeComponent implements OnInit {
   currentTemp = '17 °C';
   location = 'Estación - Universidad Tecnológica de Querétaro';
 
+  currentWeatherState: WeatherState = 'night'; 
+
   // Descripciones según el clima
   weatherDescriptions: Record<WeatherState, string> = {
     night: 'Periodo de oscuridad, desde el atardecer hasta el amanecer.',
@@ -57,6 +59,8 @@ export class HomeComponent implements OnInit {
 
   // URL del backend (ajusta si es necesario, ej: para producción cambia a tu dominio)
   private backendUrl = 'http://localhost:5001';  // Puerto de tu Flask app
+
+  isReporting = false;
 
   constructor(private router: Router, private http: HttpClient) {}  // Inyecta HttpClient
 
@@ -107,16 +111,31 @@ export class HomeComponent implements OnInit {
     this.showMenu = false;
   }
 
-  reportFlood() {  // Ya no async, usa subscribe para manejar la respuesta
-    // Obtén la ubicación actual del usuario (geolocalización) - opcional, si falla usa la hardcodeada
-    let userLocation = this.location;
-    
+  reportFlood() {
+    if (this.isReporting) return;
+    this.isReporting = true;
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        this.sendReport(`GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+      },
+      () => {
+        // Fallback a ubicación hardcodeada
+        this.sendReport(this.location);
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  }
+
+  private sendReport(userLocation: string) {
     // Prepara los parámetros para el backend
     const payload = {
       ubicacion: userLocation,
       fecha: this.currentDate,
       temperatura: this.currentTemp,
-      descripcion_clima: this.currentDescription,
+      descripcion_clima: this.weatherDescriptions[this.currentWeatherState],
       mensaje: 'Se ha reportado una posible inundación en la zona. Verificar inmediatamente.'  // Personalízalo
     };
 
@@ -128,14 +147,15 @@ export class HomeComponent implements OnInit {
       next: (response: any) => {
         console.log('Respuesta del backend:', response);
         alert('¡Reporte enviado exitosamente! Tu compañía ha sido notificada por email.');
-        // Opcional: Navega a una página de confirmación
-        // this.router.navigate(['/reporte-exito']);
+        // Navega al mapa para ver el marcador
+        this.router.navigate(['/mapa']);
       },
       error: (error: any) => {
         console.error('Error al enviar el reporte:', error);
         const errorMsg = error.error?.intData?.message || 'Error desconocido';
         alert(`Error al enviar el reporte: ${errorMsg}. Verifica que el backend esté corriendo.`);
-      }
+      },
+      complete: () => (this.isReporting = false)
     });
   }
 
@@ -146,6 +166,4 @@ export class HomeComponent implements OnInit {
   get mainIcon(): string {
     return this.mainWeatherIcons[this.currentWeatherState];
   }
-
-  currentWeatherState: WeatherState = 'night'; 
 }
