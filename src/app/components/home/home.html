@@ -7,24 +7,13 @@
     <h1 class="app-title">Weatheria</h1>
   </header>
 
-  <!-- Menú desplegable para cambiar estados (solo para desarrollo) -->
+  <!-- Menú desplegable -->
   <div class="dev-menu" *ngIf="showMenu">
-    <p class="dev-menu-title">Cambiar estado del clima:</p>
-    <button 
-      *ngFor="let state of weatherStates" 
-      (click)="changeWeatherState(state.value)"
-      class="dev-menu-item"
-      [class.active]="currentWeatherState === state.value">
-      {{ state.label }}
-    </button>
-    <button (click)="goToDashboard()" class="dev-menu-item">
-     Ver Dashboard
-    </button>
-    <button (click)="goToHistorial()" class="dev-menu-item">
-     Ver Historial
+    <button (click)="goToLogin()" class="dev-menu-item">
+      Iniciar sesión
     </button>
     <button (click)="goToMapa()" class="dev-menu-item">
-     Ver Mapa
+      Ver Mapa
     </button>
   </div>
 
@@ -48,20 +37,21 @@
     <p class="description-text">{{ currentDescription }}</p>
   </div>
 
-  <!-- Pronóstico por horas -->
-  <div class="hourly-forecast">
-    <div 
-      *ngFor="let hour of hourlyForecast; let i = index" 
-      class="hour-item"
-      [class.highlighted]="i === 4">
-      <p class="hour-time">{{ hour.time }}</p>
-      <span class="hour-icon">{{ hour.icon }}</span>
-      <p class="hour-temp">{{ hour.temp }}</p>
-    </div>
+  <!-- Pronóstico por días -->
+<div class="hourly-forecast">
+  <div 
+    *ngFor="let day of hourlyForecast; let i = index" 
+    class="hour-item"
+    [class.highlighted]="i === 0">
+    <p class="hour-time">{{ day.day }}</p>
+    <span class="hour-icon">{{ day.icon }}</span>
+    <p class="hour-temp">{{ day.temp }}</p>
   </div>
+</div>
+
 
   <!-- Botón de reporte de inundación -->
-  <button class="report-button" (click)="reportFlood()">
+  <button class="report-button" (click)="goToMapa()">
     <span class="report-icon">🚨</span>
     <span class="report-text">Reportar inundación y marcar ubicación</span>
   </button>
